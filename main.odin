@@ -1,9 +1,7 @@
 package gea_2026
 
-import "core:fmt"
 import rl "vendor:raylib"
 
-import "core:c"
 
 WINDOW_HEIGHT :: 600
 WINDOW_WIDTH :: 800
@@ -11,7 +9,7 @@ WINDOW_WIDTH :: 800
 game_over := false
 
 main :: proc() {
-    rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Breakout");
+    rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Dungeon Explorer");
     defer rl.CloseWindow();
 
     rl.SetTargetFPS(60);

@@ -18,25 +18,19 @@ game_init :: proc() {
 }
 
 game_deinit :: proc() {
+    unload_textures()
     ecs.clear(&db)
 }
 
 game_setup :: proc() {
-    setup_paddle()
-    setup_ball()
-    setup_block_grid()
+    setup_2dmap_generation()
 }
 
 game_input :: proc() {
-    input_axis()
 }
 
 game_update :: proc() {
     dt = rl.GetFrameTime()
-    update_paddle()
-    update_ball()
-    update_check_collisions()
-    update_check_state()
 }
 
 game_render :: proc() {
@@ -44,5 +38,6 @@ game_render :: proc() {
     defer rl.EndDrawing()
 
     rl.ClearBackground(rl.BLACK)
-    render_rectangles()
+
+    render_tilemap()
 }
