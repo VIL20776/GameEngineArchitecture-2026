@@ -5,9 +5,11 @@ import "core:c"
 import rl "vendor:raylib"
 import ecs "ode_ecs/src"
 
-Velocity :: struct {
-    dir: rl.Vector2,
-    speed: c.float
+Position :: rl.Vector2
+Axes :: rl.Vector2
+
+Status :: struct {
+    health, wealth: c.int
 }
 
 Texture :: struct {
@@ -28,26 +30,31 @@ Tilemap :: struct {
 
 Animation :: struct {
     texture: ^rl.Texture,
-    rect: rl.Rectangle,
-    offset, frames: int,
-    time, nextTiem: f64,
+    source: rl.Rectangle,
+    frames, current_frame: uint,
+    time, next_frame_time: c.float,
 }
 
 rectangle: ecs.Table(rl.Rectangle)
-inputAxis: ecs.Table(rl.Vector2) 
+cameras: ecs.Table(rl.Camera2D)
+inputAxes: ecs.Table(Axes) 
+positions: ecs.Table(Position) 
 
 animations: ecs.Table(Animation)
-int_maps: ecs.Table(IntMap)
+intMaps: ecs.Table(IntMap)
 tilemaps: ecs.Table(Tilemap)
 
-velocity: ecs.Table(Velocity)
+stats: ecs.Table(Status)
 
 component_init :: proc() {
-    ecs.table_init(&rectangle, &db, ENTITY_CAP)
-    ecs.table_init(&inputAxis, &db, ENTITY_CAP)
-    ecs.table_init(&velocity, &db, ENTITY_CAP)
+    ecs.table_init(&rectangle, &active_scene.db, ENTITY_CAP)
+    ecs.table_init(&cameras, &active_scene.db, ENTITY_CAP)
+    ecs.table_init(&inputAxes, &active_scene.db, ENTITY_CAP)
+    ecs.table_init(&positions, &active_scene.db, ENTITY_CAP)
 
-    ecs.table_init(&animations, &db, ENTITY_CAP)
-    ecs.table_init(&int_maps, &db, ENTITY_CAP)
-    ecs.table_init(&tilemaps, &db, ENTITY_CAP)
+    ecs.table_init(&stats, &active_scene.db, ENTITY_CAP)
+    ecs.table_init(&animations, &active_scene.db, ENTITY_CAP)
+    ecs.table_init(&intMaps, &active_scene.db, ENTITY_CAP)
+    ecs.table_init(&tilemaps, &active_scene.db, ENTITY_CAP)
+
 }

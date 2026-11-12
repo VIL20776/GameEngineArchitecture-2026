@@ -10,10 +10,16 @@ import ecs "ode_ecs/src"
 
 // Setup systems
 setup_player :: proc() {
-    player, _ := ecs.create_entity(&db)
-    anim, _ := ecs.add_component(&animations, player)
+    player, _ := ecs.create_entity(&active_scene.db)
 
+    anim, _ := ecs.add_component(&animations, player)
     anim.texture = load_texture("images/character.png")
+    anim.source = {0, 0, 16, 16}
+    anim.frames = 3
+    anim.next_frame_time = 0.67
+
+    ecs.add_component(&inputAxes, player)
+    ecs.add_component(&positions, player)
 }
 
 setup_2dmap_generation :: proc() {
@@ -21,10 +27,10 @@ setup_2dmap_generation :: proc() {
     tilemap_height :: 37 
     tilemap_width :: 50
 
-    scene_map, _ := ecs.create_entity(&db)
+    scene_map, _ := ecs.create_entity(&active_scene.db)
 
     // Generate noise map
-    int_map, _ := ecs.add_component(&int_maps, scene_map)
+    int_map, _ := ecs.add_component(&intMaps, scene_map)
     int_map.height = tilemap_height
     int_map.width = tilemap_width
     int_map.data = make([dynamic]u8, tilemap_height * tilemap_width)
@@ -75,15 +81,51 @@ setup_2dmap_generation :: proc() {
     }
 }
 
+setup_camera :: proc() {
+    scene_camera, _ := ecs.create_entity(&active_scene.db)
+
+    cam, _ := ecs.add_component(&cameras, scene_camera)
+    cam.rotation = 0
+    cam.zoom = 2
+
+    // pos := ecs.slice(&player_view, Position)[0]
+    
+    cam.target = {0, 0}
+}
+
+setup_start_positions :: proc() {
+    im_slice := ecs.slice(&map_view, IntMap)
+
+    for i in 0..<len(im_slice) {
+        im := im_slice[i]
+
+        player_pos := ecs.slice(&player_view, Position)[0]
+        for im_index: uint = 0; im_index < im.height * im.width; im_index += 1 {
+            x := cast(c.float)(im_index % im.width)
+            y := cast(c.float)(im_index / im.height)
+
+            if im.data[im_index] > 0 do continue
+
+            player_pos^ = {x, y}
+        }
+    }
+}
+
 // Input systems
 input_axis :: proc() {
-    for &axis in ecs.slice(&inputAxis) {
-        axis.x = 0
+    for &axis in ecs.slice(&inputAxes) {
+        axis.xy = 0
         if rl.IsKeyDown(.LEFT) {
             axis.x = -1.0
         }
         if rl.IsKeyDown(.RIGHT) {
             axis.x = 1.0
+        }
+        if rl.IsKeyDown(.UP) {
+            axis.y = -1.0
+        }
+        if rl.IsKeyDown(.DOWN) {
+            axis.y = 1.0
         }
     }
 }
@@ -97,9 +139,35 @@ render_rectangles :: proc() {
     }
 }
 
+render_begin_camera :: proc() {
+    camera := &ecs.slice(&cameras)[0]
+    rl.BeginMode2D(camera^)
+}
+
+render_end_camera :: proc() {
+    rl.EndMode2D()
+}
+
+render_animations :: proc() {
+    anim_slice := ecs.slice(&anim_view, Animation)
+    pos_slice := ecs.slice(&anim_view, rl.Vector2)
+
+    for i in 0..<len(anim_slice) {
+        anim := anim_slice[i]
+        if anim.time += dt; anim.time >= anim.next_frame_time {
+            anim.time = 0
+            anim.current_frame = (anim.current_frame + 1) % anim.frames
+            anim.source.x = cast(f32)anim.current_frame * 16 
+        }
+
+        pos := pos_slice[i]
+        rl.DrawTextureRec(anim.texture^, anim.source, pos^, rl.WHITE)
+    }
+}
+
 render_tilemap :: proc() {
-    im_slice := ecs.slice(&map_view, &int_maps)
-    tm_slice := ecs.slice(&map_view, &tilemaps)
+    im_slice := ecs.slice(&map_view, IntMap)
+    tm_slice := ecs.slice(&map_view, Tilemap)
 
     for i in 0..<len(im_slice) {
         tm := tm_slice[i]
@@ -108,7 +176,16 @@ render_tilemap :: proc() {
         for y in 0..<tm.height {
             for x in 0..<tm.width {
                 index := (y * tm.width) + x
-                if im.data[index] <= 0 do continue 
+
+                if im.data[index] <= 0 {
+                    rl.DrawRectangle(
+                        cast(c.int)x * 16, 
+                        cast(c.int)y * 16, 
+                        16, 16, 
+                        rl.Color{199, 144, 90, 255})
+
+                    continue
+                }
 
                 tile := tm.tiles[index]
                 tile_pos := tilemap_0[tile]
@@ -127,3 +204,4 @@ render_tilemap :: proc() {
         }
     }
 }
+
