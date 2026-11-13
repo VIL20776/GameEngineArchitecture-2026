@@ -23,12 +23,12 @@ game_setup :: proc() {
 }
 
 game_input :: proc() {
-    // for sys in active_scene.input do sys()
+    for sys in active_scene.input do sys()
 }
 
 game_update :: proc() {
     dt = rl.GetFrameTime()
-    // for sys in active_scene.update do sys()
+    for sys in active_scene.update do sys()
 }
 
 game_render :: proc() {

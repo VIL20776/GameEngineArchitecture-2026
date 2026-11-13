@@ -2,9 +2,8 @@ package gea_2026
 
 import rl "vendor:raylib"
 
-
-WINDOW_HEIGHT :: 600
-WINDOW_WIDTH :: 800
+WINDOW_HEIGHT :: 480
+WINDOW_WIDTH :: 640
 
 game_over := false
 

@@ -18,7 +18,9 @@ setup_player :: proc() {
     anim.frames = 3
     anim.next_frame_time = 0.67
 
-    ecs.add_component(&inputAxes, player)
+    event, _ := ecs.add_component(&inputEvents, player)
+    event.next_input_time = rl.GetTime()
+
     ecs.add_component(&positions, player)
 }
 
@@ -85,12 +87,13 @@ setup_camera :: proc() {
     scene_camera, _ := ecs.create_entity(&active_scene.db)
 
     cam, _ := ecs.add_component(&cameras, scene_camera)
+    cam.offset = {(WINDOW_HEIGHT / 2) - 32, (WINDOW_HEIGHT / 2) - 32}
     cam.rotation = 0
     cam.zoom = 2
 
-    // pos := ecs.slice(&player_view, Position)[0]
+    pos := ecs.slice(&player_view, Position)[0]
     
-    cam.target = {0, 0}
+    cam.target = pos.xy
 }
 
 setup_start_positions :: proc() {
@@ -107,30 +110,71 @@ setup_start_positions :: proc() {
             if im.data[im_index] > 0 do continue
 
             player_pos^ = {x, y}
+            return
         }
     }
 }
 
 // Input systems
-input_axis :: proc() {
-    for &axis in ecs.slice(&inputAxes) {
-        axis.xy = 0
+input_axis_event :: proc() {
+    for &event in ecs.slice(&inputEvents) {
+        event.axes.xy = 0
+
         if rl.IsKeyDown(.LEFT) {
-            axis.x = -1.0
+            event.axes_buffer.x = -1.0
         }
         if rl.IsKeyDown(.RIGHT) {
-            axis.x = 1.0
+            event.axes_buffer.x = 1.0
         }
         if rl.IsKeyDown(.UP) {
-            axis.y = -1.0
+            event.axes_buffer.y = -1.0
         }
         if rl.IsKeyDown(.DOWN) {
-            axis.y = 1.0
+            event.axes_buffer.y = 1.0
         }
+
+        event.wait_time = rl.GetTime()
+        if event.wait_time < event.next_input_time do return
+
+        event.axes = event.axes_buffer
+        event.axes_buffer.xy = 0
+        event.next_input_time = event.wait_time + 0.8
     }
 }
 
+update_camera :: proc() {
+    camera := &ecs.slice(&cameras)[0]
+    player_pos := ecs.slice(&player_view, Position)[0]
+    grid := &ecs.slice(&intMaps)[0]
+
+    // offset := rl.Vector2{10 * 16, 7.5 * 16}
+
+    camera.target = (player_pos.xy * 16)
+}
+
 // Update systems
+update_player_movement :: proc() {
+    event := ecs.slice(&player_view, InputEvent)[0] 
+    if event.axes.x == 0 && event.axes.y == 0 do return
+
+    pos := ecs.slice(&player_view, Position)[0]
+    temp_pos := pos^
+
+    grid := &ecs.slice(&intMaps)[0]
+    
+    temp_pos += event.axes.xy
+    if temp_pos.x < 0 || uint(temp_pos.x) >= grid.width || temp_pos.y < 0 || uint(temp_pos.y) > grid.height {
+        return
+    }
+
+    i := (uint(temp_pos.y) * grid.width) + uint(temp_pos.x)
+    if grid.data[i] > 0 {
+        grid.data[i] = 0
+        return
+    }
+
+    pos^ = temp_pos
+}
 
 // Render systems
 render_rectangles :: proc() {
@@ -150,7 +194,7 @@ render_end_camera :: proc() {
 
 render_animations :: proc() {
     anim_slice := ecs.slice(&anim_view, Animation)
-    pos_slice := ecs.slice(&anim_view, rl.Vector2)
+    pos_slice := ecs.slice(&anim_view, Position)
 
     for i in 0..<len(anim_slice) {
         anim := anim_slice[i]
@@ -161,7 +205,7 @@ render_animations :: proc() {
         }
 
         pos := pos_slice[i]
-        rl.DrawTextureRec(anim.texture^, anim.source, pos^, rl.WHITE)
+        rl.DrawTextureRec(anim.texture^, anim.source, pos.xy * 16, rl.WHITE)
     }
 }
 

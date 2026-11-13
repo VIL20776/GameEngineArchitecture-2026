@@ -8,10 +8,10 @@ view_init :: proc() {
     ecs.view_init(&map_view, &active_scene.db, 
         includes = {&intMaps, &tilemaps}
         )
-    ecs.view_init(&player_view, &active_scene.db,
-        includes = {&animations, &positions, &inputAxes}
-        )
     ecs.view_init(&anim_view, &active_scene.db,
         includes = {&animations, &positions}
+        )
+    ecs.view_init(&player_view, &active_scene.db,
+        includes = {&animations, &positions, &inputEvents}
         )
 }

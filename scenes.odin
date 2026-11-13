@@ -31,8 +31,10 @@ scenes_init :: proc() {
         setup_start_positions,
         setup_camera)
     append(&game.input,
-        input_axis)
-    // append(&game.update,)
+        input_axis_event)
+    append(&game.update,
+        update_player_movement,
+        update_camera)
     append(&game.render,
         render_begin_camera,
         render_tilemap,
