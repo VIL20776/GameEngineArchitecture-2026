@@ -5,9 +5,12 @@ import "core:c"
 import rl "vendor:raylib"
 import ecs "ode_ecs/src"
 
+game_db: ecs.Database
 dt: c.float
 
 game_init :: proc() {
+    ecs.init(&game_db, ENTITY_CAP)
+
     scenes_init()
     component_init()
     view_init()

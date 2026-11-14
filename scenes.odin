@@ -26,6 +26,7 @@ scenes_init :: proc() {
     game := &scenes[1]
     ecs.init(&game.db, ENTITY_CAP)
     append(&game.setup,
+        setup_game_manager,
         setup_player,
         setup_2dmap_generation,
         setup_start_positions,
@@ -39,7 +40,8 @@ scenes_init :: proc() {
         render_begin_camera,
         render_tilemap,
         render_animations,
-        render_end_camera)
+        render_end_camera,
+        render_player_state)
 
 
     active_scene = &scenes[1]

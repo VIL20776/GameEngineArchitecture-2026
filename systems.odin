@@ -9,6 +9,16 @@ import rl "vendor:raylib"
 import ecs "ode_ecs/src"
 
 // Setup systems
+setup_game_manager :: proc() {
+    if ecs.any_table_len(&playerStats) != 0 do return
+
+    manager, _ := ecs.create_entity(&game_db)
+
+    stats, _ := ecs.add_component(&playerStats, manager)
+    stats.health = 5
+    stats.level = 1
+}
+
 setup_player :: proc() {
     player, _ := ecs.create_entity(&active_scene.db)
 
@@ -25,7 +35,6 @@ setup_player :: proc() {
 }
 
 setup_2dmap_generation :: proc() {
-    noise_ceiling :: 0.1
     tilemap_height :: 37 
     tilemap_width :: 50
 
@@ -43,13 +52,45 @@ setup_2dmap_generation :: proc() {
         for x in 0..<tilemap_width {
             i := (y * tilemap_width) + x
             value := noise.noise_2d(seed, {f64(x), f64(y)})
-            int_map.data[i] = 1 if value > 0.1 else 0
+
+            int_map.data[i] = 0
+            if value > 0.1 {
+                int_map.data[i] = 1
+            }
+
+            if value < -0.7 {
+                int_map.data[i] = 2
+            }
+
+            if value > 0.7 {
+                int_map.data[i] = 3
+            }
+
+            if value < -0.8 {
+                int_map.data[i] = 4
+            }
+
+            if value > 0.8 {
+                int_map.data[i] = 5
+            }
+
+            if value < -0.9 {
+                int_map.data[i] = 6
+            }
+
+            if value > 0.9 {
+                int_map.data[i] = 7
+            }
+
+            // int_map.data[i] = 1 if value > 0.1 else 0
+            // fmt.printf("%d", int_map.data[i])
         }
+        // fmt.print("\n")
     }
 
     tilemap, _ := ecs.add_component(&tilemaps, scene_map)
 
-    tilemap.texture = load_texture("images/tilemap_4bit.png")
+    tilemap.texture = load_texture("images/tilemap.png")
     tilemap.height = tilemap_height
     tilemap.width = tilemap_width
     tilemap.tiles = make([dynamic]u8, tilemap_height * tilemap_width)
@@ -63,7 +104,7 @@ setup_2dmap_generation :: proc() {
         for x in 0..<tilemap_width {
             i := (y * tilemap_width) + x
             
-            if int_map.data[i] == 0 {
+            if (int_map.data[i] & 1) == 0 {
                 continue
             }
 
@@ -75,7 +116,7 @@ setup_2dmap_generation :: proc() {
                 if nx < 0 || nx >= tilemap_width || ny < 0 || ny >= tilemap_height do continue;
 
                 n := (ny * tilemap_width) + nx
-                bitmask += int_map.data[n] * (1 << u8(3 - di))
+                bitmask += (int_map.data[n] & 1) * (1 << u8(3 - di))
             }
 
             tilemap.tiles[i] = bitmask
@@ -87,7 +128,7 @@ setup_camera :: proc() {
     scene_camera, _ := ecs.create_entity(&active_scene.db)
 
     cam, _ := ecs.add_component(&cameras, scene_camera)
-    cam.offset = {(WINDOW_HEIGHT / 2) - 32, (WINDOW_HEIGHT / 2) - 32}
+    cam.offset = {(WINDOW_HEIGHT / 2) - 16, (WINDOW_HEIGHT / 2) - 16}
     cam.rotation = 0
     cam.zoom = 2
 
@@ -120,6 +161,9 @@ input_axis_event :: proc() {
     for &event in ecs.slice(&inputEvents) {
         event.axes.xy = 0
 
+        event.wait_time = rl.GetTime()
+        // if event.wait_time < event.next_input_time + 0.33 do return
+
         if rl.IsKeyDown(.LEFT) {
             event.axes_buffer.x = -1.0
         }
@@ -133,12 +177,11 @@ input_axis_event :: proc() {
             event.axes_buffer.y = 1.0
         }
 
-        event.wait_time = rl.GetTime()
         if event.wait_time < event.next_input_time do return
 
         event.axes = event.axes_buffer
         event.axes_buffer.xy = 0
-        event.next_input_time = event.wait_time + 0.8
+        event.next_input_time = event.wait_time + 0.67
     }
 }
 
@@ -167,10 +210,21 @@ update_player_movement :: proc() {
         return
     }
 
+    stats := &ecs.slice(&playerStats)[0]
+    stats.steps += 1
+
     i := (uint(temp_pos.y) * grid.width) + uint(temp_pos.x)
-    if grid.data[i] > 0 {
-        grid.data[i] = 0
+    if bool(grid.data[i] & 1) {
+        grid.data[i] -= 1
         return
+    } else {
+        switch grid.data[i] {
+            case 2: stats.wealth += 5
+            case 4: stats.wealth += 100
+            case 6: stats.wealth += 1000
+            case: break
+        }
+        grid.data[i] = 0
     }
 
     pos^ = temp_pos
@@ -221,27 +275,50 @@ render_tilemap :: proc() {
             for x in 0..<tm.width {
                 index := (y * tm.width) + x
 
-                if im.data[index] <= 0 {
+                if !bool(im.data[index] & 1) {
                     rl.DrawRectangle(
                         cast(c.int)x * 16, 
                         cast(c.int)y * 16, 
                         16, 16, 
                         rl.Color{199, 144, 90, 255})
+                } else {
+                    tile := tm.tiles[index]
+                    tile_pos := tilemap_0[tile]
 
-                    continue
+                    rect: rl.Rectangle = {
+                        x = tile_pos.x, 
+                        y = tile_pos.y, 
+                        height = 16, 
+                        width = 16}
+
+                    pos_x := f32(x) * 16
+                    pos_y := f32(y) * 16
+
+                    rl.DrawTextureRec(tm.texture^, rect, {pos_x, pos_y}, rl.WHITE)
                 }
 
-                tile := tm.tiles[index]
-                tile_pos := tilemap_0[tile]
+                pos_value := im.data[index]
+                if pos_value == 0 || pos_value == 1 do continue
 
                 rect: rl.Rectangle = {
-                    x = tile_pos.x, 
-                    y = tile_pos.y, 
+                    y = 64, 
                     height = 16, 
-                    width = 16}
+                    width = 16
+                }
 
                 pos_x := f32(x) * 16
                 pos_y := f32(y) * 16
+
+                switch (pos_value) {
+                    case 2,3:
+                    rect.x = 0
+                    case 4,5:
+                    rect.x = 16
+                    case 6,7:
+                    rect.x = 32
+                    case 8,9:
+                    rect.x = 48
+                }
 
                 rl.DrawTextureRec(tm.texture^, rect, {pos_x, pos_y}, rl.WHITE)
             }
@@ -249,3 +326,28 @@ render_tilemap :: proc() {
     }
 }
 
+render_player_state :: proc() {
+    ui_pos_x :: WINDOW_WIDTH - 160
+
+    rl.DrawRectangle(
+        posX = ui_pos_x,
+        posY = 0,
+        width = 160,
+        height = WINDOW_HEIGHT,
+        color = rl.Color{199, 144, 90, 255}
+        )
+
+    stats := &ecs.slice(&playerStats)[0]
+
+    rl.DrawText("HEALTH", ui_pos_x + 16, 0, 32, rl.BLACK) 
+    rl.DrawText(fmt.caprintf("%d", stats.health), ui_pos_x + 16, 32, 32, rl.BLACK)
+
+    rl.DrawText("WEALTH", ui_pos_x + 16, 80, 32, rl.BLACK)
+    rl.DrawText(fmt.caprintf("%d", stats.wealth), ui_pos_x + 16, 112, 32, rl.BLACK)
+
+    rl.DrawText("STEPS", ui_pos_x + 16, 160, 32, rl.BLACK)
+    rl.DrawText(fmt.caprintf("%d", stats.steps), ui_pos_x + 16, 192, 32, rl.BLACK)
+
+    rl.DrawText("LEVEL", ui_pos_x + 16, 240, 32, rl.BLACK)
+    rl.DrawText(fmt.caprintf("%d", stats.level), ui_pos_x + 16, 272, 32, rl.BLACK)
+}

@@ -13,8 +13,8 @@ InputEvent :: struct {
     buttons, buttons_buffer: enum{accept, back}
 }
 
-Status :: struct {
-    health, wealth: c.int
+PlayerStatus :: struct {
+    health, wealth, steps, level: c.int
 }
 
 Texture :: struct {
@@ -49,17 +49,18 @@ animations: ecs.Table(Animation)
 intMaps: ecs.Table(IntMap)
 tilemaps: ecs.Table(Tilemap)
 
-stats: ecs.Table(Status)
+playerStats: ecs.Table(PlayerStatus)
 
 component_init :: proc() {
     ecs.table_init(&rectangle, &active_scene.db, ENTITY_CAP)
     ecs.table_init(&cameras, &active_scene.db, ENTITY_CAP)
-    ecs.table_init(&inputEvents, &active_scene.db, ENTITY_CAP)
     ecs.table_init(&positions, &active_scene.db, ENTITY_CAP)
-
-    ecs.table_init(&stats, &active_scene.db, ENTITY_CAP)
-    ecs.table_init(&animations, &active_scene.db, ENTITY_CAP)
-    ecs.table_init(&intMaps, &active_scene.db, 1) // one intgrid per scene
     ecs.table_init(&tilemaps, &active_scene.db, ENTITY_CAP)
+    ecs.table_init(&animations, &active_scene.db, ENTITY_CAP)
+
+    ecs.table_init(&inputEvents, &active_scene.db, 1)
+    ecs.table_init(&intMaps, &active_scene.db, 1) 
+
+    ecs.table_init(&playerStats, &game_db, 1)
 
 }
