@@ -5,21 +5,23 @@ import "core:c"
 import rl "vendor:raylib"
 import ecs "ode_ecs/src"
 
+ButtonsSet :: bit_set[enum{accept, back}]
+
 Position :: distinct rl.Vector2
 
 InputEvent :: struct {
-    wait_time, next_input_time: c.double,
+    wait_time, next_input_time, next_input_delay: c.double,
     axes, axes_buffer: rl.Vector2,
-    buttons, buttons_buffer: enum{accept, back}
+    buttons, buttons_buffer: ButtonsSet
 }
 
 PlayerStatus :: struct {
     health, wealth, steps, level: c.int
 }
 
-Texture :: struct {
-    texture: rl.Texture,
-    path: string
+Menu :: struct {
+    background: ^rl.Texture,
+    cursor: c.int
 }
 
 IntMap :: struct {
@@ -40,27 +42,15 @@ Animation :: struct {
     time, next_frame_time: c.float,
 }
 
-rectangle: ecs.Table(rl.Rectangle)
+rectangles: ecs.Table(rl.Rectangle)
 cameras: ecs.Table(rl.Camera2D)
 inputEvents: ecs.Table(InputEvent) 
 positions: ecs.Table(Position) 
 
+menus: ecs.Table(Menu)
 animations: ecs.Table(Animation)
 intMaps: ecs.Table(IntMap)
 tilemaps: ecs.Table(Tilemap)
 
 playerStats: ecs.Table(PlayerStatus)
 
-component_init :: proc() {
-    ecs.table_init(&rectangle, &active_scene.db, ENTITY_CAP)
-    ecs.table_init(&cameras, &active_scene.db, ENTITY_CAP)
-    ecs.table_init(&positions, &active_scene.db, ENTITY_CAP)
-    ecs.table_init(&tilemaps, &active_scene.db, ENTITY_CAP)
-    ecs.table_init(&animations, &active_scene.db, ENTITY_CAP)
-
-    ecs.table_init(&inputEvents, &active_scene.db, 1)
-    ecs.table_init(&intMaps, &active_scene.db, 1) 
-
-    ecs.table_init(&playerStats, &game_db, 1)
-
-}

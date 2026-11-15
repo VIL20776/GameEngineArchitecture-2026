@@ -5,15 +5,15 @@ import "core:c"
 import rl "vendor:raylib"
 import ecs "ode_ecs/src"
 
-game_db: ecs.Database
+global_db: ecs.Database
 dt: c.float
 
 game_init :: proc() {
-    ecs.init(&game_db, ENTITY_CAP)
+    ecs.init(&global_db, ENTITY_CAP)
+        
+    ecs.table_init(&playerStats, &global_db, 1)
 
     scenes_init()
-    component_init()
-    view_init()
 }
 
 game_deinit :: proc() {
@@ -22,16 +22,16 @@ game_deinit :: proc() {
 }
 
 game_setup :: proc() {
-    for sys in active_scene.setup do sys()
+    for i in 0..<len(active_scene.setup) do active_scene.setup[i]()
 }
 
 game_input :: proc() {
-    for sys in active_scene.input do sys()
+    for i in 0..<len(active_scene.input) do active_scene.input[i]()
 }
 
 game_update :: proc() {
     dt = rl.GetFrameTime()
-    for sys in active_scene.update do sys()
+    for i in 0..<len(active_scene.update) do active_scene.update[i]()
 }
 
 game_render :: proc() {
@@ -40,5 +40,5 @@ game_render :: proc() {
 
     rl.ClearBackground(rl.GRAY)
 
-    for sys in active_scene.render do sys()
+    for i in 0..<len(active_scene.render) do active_scene.render[i]()
 }

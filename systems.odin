@@ -12,11 +12,21 @@ import ecs "ode_ecs/src"
 setup_game_manager :: proc() {
     if ecs.any_table_len(&playerStats) != 0 do return
 
-    manager, _ := ecs.create_entity(&game_db)
+    manager, _ := ecs.create_entity(&global_db)
 
     stats, _ := ecs.add_component(&playerStats, manager)
     stats.health = 5
     stats.level = 1
+}
+
+setup_main_menu :: proc() {
+    main, _ := ecs.create_entity(&active_scene.db)
+    
+    menu, _ := ecs.add_component(&menus, main)
+    menu.background = load_texture("images/title_bg.png")
+
+    event, _ := ecs.add_component(&inputEvents, main)
+    event.next_input_delay = 0.33
 }
 
 setup_player :: proc() {
@@ -29,7 +39,7 @@ setup_player :: proc() {
     anim.next_frame_time = 0.67
 
     event, _ := ecs.add_component(&inputEvents, player)
-    event.next_input_time = rl.GetTime()
+    event.next_input_delay = 0.67
 
     ecs.add_component(&positions, player)
 }
@@ -165,23 +175,42 @@ input_axis_event :: proc() {
         // if event.wait_time < event.next_input_time + 0.33 do return
 
         if rl.IsKeyDown(.LEFT) {
-            event.axes_buffer.x = -1.0
+            event.axes_buffer = {-1.0, 0}
         }
         if rl.IsKeyDown(.RIGHT) {
-            event.axes_buffer.x = 1.0
+            event.axes_buffer = {1.0, 0}
         }
         if rl.IsKeyDown(.UP) {
-            event.axes_buffer.y = -1.0
+            event.axes_buffer = {0, -1.0}
         }
         if rl.IsKeyDown(.DOWN) {
-            event.axes_buffer.y = 1.0
+            event.axes_buffer = {0, 1.0}
+        } 
+
+        if rl.IsKeyDown(.SPACE) {
+            event.buttons_buffer += {.accept}
         }
 
         if event.wait_time < event.next_input_time do return
 
         event.axes = event.axes_buffer
         event.axes_buffer.xy = 0
-        event.next_input_time = event.wait_time + 0.67
+
+        event.buttons = event.buttons_buffer
+        event.buttons_buffer = {}
+
+        event.next_input_time = event.wait_time + event.next_input_delay
+    }
+}
+
+update_main_menu :: proc() {
+    menu := ecs.slice(&menu_view, Menu)[0]
+    input := ecs.slice(&menu_view, InputEvent)[0]
+    
+    menu.cursor = (menu.cursor + cast(c.int)input.axes.y) & 1 
+    if .accept in input.buttons {
+        if menu.cursor == 0 do switch_scene(1)
+        if menu.cursor == 1 do game_over = true
     }
 }
 
@@ -232,9 +261,25 @@ update_player_movement :: proc() {
 
 // Render systems
 render_rectangles :: proc() {
-    for &rect in ecs.slice(&rectangle) {
+    for &rect in ecs.slice(&rectangles) {
         rl.DrawRectangleRec(rect, rl.WHITE)
     }
+}
+
+render_main_menu :: proc() {
+    menu := ecs.slice(&menu_view, &menus)[0]
+
+    rl.DrawTexture(menu.background^, 0, 0, rl.WHITE)
+
+    rl.DrawText("DUNGEON", 240, 80, 32, rl.BLACK) 
+    rl.DrawText("EXPLORER", 240, 112, 32, rl.BLACK) 
+
+    rl.DrawText("START", 272, 272, 32, rl.BLACK) 
+    rl.DrawText("EXIT", 272, 304, 32, rl.BLACK) 
+
+    rl.DrawText(">", 256, 272 + (menu.cursor * 32), 32, rl.BLACK) 
+
+    rl.DrawText("Press SPACE to select", 182, 408, 24, rl.BLACK) 
 }
 
 render_begin_camera :: proc() {
