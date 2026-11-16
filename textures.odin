@@ -2,12 +2,14 @@ package gea_2026
 
 import rl "vendor:raylib"
 
-texture_registry: [dynamic]rl.Texture
+texture_registry: map[cstring]rl.Texture
 
 load_texture :: proc(filepath: cstring) -> ^rl.Texture {
-    append(&texture_registry, rl.LoadTexture(filepath))
-    i := len(texture_registry) - 1
-    return &texture_registry[i]
+    if filepath not_in texture_registry {
+        texture_registry[filepath] = rl.LoadTexture(filepath)
+    }
+
+    return &texture_registry[filepath]
 }
 
 unload_textures :: proc() {

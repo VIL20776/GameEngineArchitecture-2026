@@ -16,7 +16,10 @@ InputEvent :: struct {
 }
 
 PlayerStatus :: struct {
-    health, wealth, steps, level: c.int
+    health, 
+    wealth, wealth_total, 
+    steps, 
+    level: c.int
 }
 
 Menu :: struct {

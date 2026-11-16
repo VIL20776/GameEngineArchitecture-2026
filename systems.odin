@@ -1,5 +1,6 @@
 package gea_2026
 
+import "core:math/rand"
 import "core:c"
 import "core:fmt"
 import "core:time"
@@ -29,13 +30,26 @@ setup_main_menu :: proc() {
     event.next_input_delay = 0.33
 }
 
+setup_results_menu :: proc() {
+    main, _ := ecs.create_entity(&active_scene.db)
+    
+    menu, _ := ecs.add_component(&menus, main)
+    menu.background = load_texture("images/results_bg.png")
+
+    event, _ := ecs.add_component(&inputEvents, main)
+    event.next_input_delay = 0.33
+
+    stats := &ecs.slice(&playerStats)[0]
+    stats.wealth_total += stats.wealth
+}
+
 setup_player :: proc() {
     player, _ := ecs.create_entity(&active_scene.db)
 
     anim, _ := ecs.add_component(&animations, player)
     anim.texture = load_texture("images/character.png")
     anim.source = {0, 0, 16, 16}
-    anim.frames = 3
+    anim.frames = 4
     anim.next_frame_time = 0.67
 
     event, _ := ecs.add_component(&inputEvents, player)
@@ -56,8 +70,8 @@ setup_2dmap_generation :: proc() {
     int_map.width = tilemap_width
     int_map.data = make([dynamic]u8, tilemap_height * tilemap_width)
 
-    // seed := time.time_to_unix(time.now())
-    seed :: 3600
+    seed := time.time_to_unix(time.now())
+    // seed :: 3600
     for y in 0..<tilemap_height {
         for x in 0..<tilemap_width {
             i := (y * tilemap_width) + x
@@ -68,11 +82,11 @@ setup_2dmap_generation :: proc() {
                 int_map.data[i] = 1
             }
 
-            if value < -0.7 {
+            if value < -0.75 {
                 int_map.data[i] = 2
             }
 
-            if value > 0.7 {
+            if value > 0.75 {
                 int_map.data[i] = 3
             }
 
@@ -92,11 +106,27 @@ setup_2dmap_generation :: proc() {
                 int_map.data[i] = 7
             }
 
+            if value < -0.95 {
+                int_map.data[i] = 8
+            }
+
+            if value > 0.95 {
+                int_map.data[i] = 9
+            }
+
             // int_map.data[i] = 1 if value > 0.1 else 0
             // fmt.printf("%d", int_map.data[i])
         }
         // fmt.print("\n")
     }
+
+    // Set exit location
+    exit_index := rand.uint_range(0, tilemap_width * tilemap_height)
+    for int_map.data[exit_index] != 0 {
+        exit_index += 1
+    }
+    int_map.data[exit_index] = 10
+    // int_map.data[5] = 10
 
     tilemap, _ := ecs.add_component(&tilemaps, scene_map)
 
@@ -209,9 +239,26 @@ update_main_menu :: proc() {
     
     menu.cursor = (menu.cursor + cast(c.int)input.axes.y) & 1 
     if .accept in input.buttons {
-        if menu.cursor == 0 do switch_scene(1)
+        if menu.cursor == 0 do switch_scene(1); else
         if menu.cursor == 1 do game_over = true
     }
+}
+
+update_results_menu :: proc() {
+    menu := ecs.slice(&menu_view, Menu)[0]
+    input := ecs.slice(&menu_view, InputEvent)[0]
+    
+    menu.cursor = (menu.cursor + cast(c.int)input.axes.y) & 1 
+    if .accept in input.buttons {
+        stats := &ecs.slice(&playerStats)[0]
+        stats.wealth = 0
+        stats.steps = 0
+        stats.level += 1
+        // if menu.cursor == 0 do 
+        // if menu.cursor == 1 do game_over = true
+        switch_scene(1)
+    }
+
 }
 
 update_camera :: proc() {
@@ -227,6 +274,18 @@ update_camera :: proc() {
 // Update systems
 update_player_movement :: proc() {
     event := ecs.slice(&player_view, InputEvent)[0] 
+    stats := &ecs.slice(&playerStats)[0]
+ 
+    if stats.health == 0 {
+        if .accept in event.buttons {
+            stats^ = {}
+            stats.level = 1
+            stats.health = 5
+            switch_scene(0)
+        }
+        return
+    }
+
     if event.axes.x == 0 && event.axes.y == 0 do return
 
     pos := ecs.slice(&player_view, Position)[0]
@@ -239,8 +298,11 @@ update_player_movement :: proc() {
         return
     }
 
-    stats := &ecs.slice(&playerStats)[0]
     stats.steps += 1
+
+    if stats.steps % 10 == 0 {
+        stats.health -= 1
+    }
 
     i := (uint(temp_pos.y) * grid.width) + uint(temp_pos.x)
     if bool(grid.data[i] & 1) {
@@ -251,12 +313,24 @@ update_player_movement :: proc() {
             case 2: stats.wealth += 5
             case 4: stats.wealth += 100
             case 6: stats.wealth += 1000
+            case 8: stats.health += 1
+            case 10: 
+                switch_scene(2)
+                return
             case: break
         }
         grid.data[i] = 0
     }
 
     pos^ = temp_pos
+}
+
+update_check_player :: proc() {
+    stats := &ecs.slice(&playerStats)[0] 
+    if stats.health == 0 {
+        anim := ecs.slice(&player_view, Animation)[0] 
+        anim.source.y = 16
+    }
 }
 
 // Render systems
@@ -279,7 +353,21 @@ render_main_menu :: proc() {
 
     rl.DrawText(">", 256, 272 + (menu.cursor * 32), 32, rl.BLACK) 
 
-    rl.DrawText("Press SPACE to select", 182, 408, 24, rl.BLACK) 
+    rl.DrawText("Press [SPACE] to select", 174, 408, 24, rl.BLACK) 
+}
+
+render_results_menu :: proc() {
+    menu := ecs.slice(&menu_view, &menus)[0]
+    stats := &ecs.slice(&playerStats)[0]
+
+    rl.DrawTexture(menu.background^, 0, 0, rl.WHITE)
+    
+    rl.DrawText(fmt.caprintf("WEALTH COLLECTED: $%d", stats.wealth), 64, 48, 32, rl.BLACK)
+    rl.DrawText(fmt.caprintf("WEALTH TOTAL: $%d", stats.wealth_total), 64, 80, 32, rl.BLACK)
+
+    rl.DrawText(fmt.caprintf("PREPARE FOR LEVEL %d", stats.level + 1), 64, 208, 32, rl.BLACK)
+
+    rl.DrawText("Press [SPACE] to continue", 150, 376, 24, rl.BLACK) 
 }
 
 render_begin_camera :: proc() {
@@ -363,6 +451,8 @@ render_tilemap :: proc() {
                     rect.x = 32
                     case 8,9:
                     rect.x = 48
+                    case 10:
+                    rect.y += 16
                 }
 
                 rl.DrawTextureRec(tm.texture^, rect, {pos_x, pos_y}, rl.WHITE)
@@ -384,15 +474,26 @@ render_player_state :: proc() {
 
     stats := &ecs.slice(&playerStats)[0]
 
+    if stats.health == 0 {
+        rl.DrawText("YOU", ui_pos_x + 16, 0, 32, rl.BLACK) 
+        rl.DrawText("DIED", ui_pos_x + 16, 32, 32, rl.BLACK) 
+
+        rl.DrawText("Press", ui_pos_x + 16, 96, 24, rl.BLACK)
+        rl.DrawText("[SPACE] to", ui_pos_x + 16, 120, 24, rl.BLACK)
+        rl.DrawText("return to", ui_pos_x + 16, 144, 24, rl.BLACK)
+        rl.DrawText("main menu", ui_pos_x + 16, 168, 24, rl.BLACK)
+        return
+    }
+
     rl.DrawText("HEALTH", ui_pos_x + 16, 0, 32, rl.BLACK) 
-    rl.DrawText(fmt.caprintf("%d", stats.health), ui_pos_x + 16, 32, 32, rl.BLACK)
+    rl.DrawText(fmt.caprintf(" %d", stats.health), ui_pos_x + 16, 32, 32, rl.BLACK)
 
     rl.DrawText("WEALTH", ui_pos_x + 16, 80, 32, rl.BLACK)
-    rl.DrawText(fmt.caprintf("%d", stats.wealth), ui_pos_x + 16, 112, 32, rl.BLACK)
+    rl.DrawText(fmt.caprintf("$%d", stats.wealth), ui_pos_x + 16, 112, 32, rl.BLACK)
 
     rl.DrawText("STEPS", ui_pos_x + 16, 160, 32, rl.BLACK)
-    rl.DrawText(fmt.caprintf("%d", stats.steps), ui_pos_x + 16, 192, 32, rl.BLACK)
+    rl.DrawText(fmt.caprintf(" %d", stats.steps), ui_pos_x + 16, 192, 32, rl.BLACK)
 
     rl.DrawText("LEVEL", ui_pos_x + 16, 240, 32, rl.BLACK)
-    rl.DrawText(fmt.caprintf("%d", stats.level), ui_pos_x + 16, 272, 32, rl.BLACK)
+    rl.DrawText(fmt.caprintf(" %d", stats.level), ui_pos_x + 16, 272, 32, rl.BLACK)
 }

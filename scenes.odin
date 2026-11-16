@@ -14,11 +14,11 @@ Scene :: struct {
     deinit: proc()
 }
 
-scenes: [dynamic]Scene
+scenes: []Scene
 active_scene: ^Scene
 
 scenes_init :: proc() {
-    scenes = make([dynamic]Scene, 2)
+    scenes = make([]Scene, 3)
 
     //Main menu
     main_menu := &scenes[0]
@@ -48,10 +48,10 @@ scenes_init :: proc() {
     append(&main_menu.render,
         render_main_menu)
 
-    //Game
-    game := &scenes[1]
+    // Level
+    level := &scenes[1]
     // ecs.init(&game.db, ENTITY_CAP)
-    game.init = proc() {
+    level.init = proc() {
         ecs.table_init(&rectangles, &active_scene.db, ENTITY_CAP)
         ecs.table_init(&cameras, &active_scene.db, ENTITY_CAP)
         ecs.table_init(&positions, &active_scene.db, ENTITY_CAP)
@@ -71,7 +71,7 @@ scenes_init :: proc() {
         )
     }
 
-    game.deinit = proc() {
+    level.deinit = proc() {
         ecs.table_terminate(&rectangles)
         ecs.table_terminate(&cameras)
         ecs.table_terminate(&positions)
@@ -85,24 +85,50 @@ scenes_init :: proc() {
         ecs.view_terminate(&player_view)
     }
 
-    append(&game.setup,
+    append(&level.setup,
         setup_game_manager,
         setup_player,
         setup_2dmap_generation,
         setup_start_positions,
         setup_camera)
-    append(&game.input,
+    append(&level.input,
         input_axis_event)
-    append(&game.update,
+    append(&level.update,
         update_player_movement,
+        update_check_player,
         update_camera)
-    append(&game.render,
+    append(&level.render,
         render_begin_camera,
         render_tilemap,
         render_animations,
         render_end_camera,
         render_player_state)
 
+    // Results
+    results := &scenes[2]
+    results.init = proc() {
+        ecs.table_init(&menus, &active_scene.db, ENTITY_CAP)
+        ecs.table_init(&inputEvents, &active_scene.db, 1)
+
+        ecs.view_init(&menu_view, &active_scene.db, 
+            includes = {&menus, &inputEvents}
+        ) 
+    }
+    results.deinit = proc() {
+        ecs.table_terminate(&menus)
+        ecs.table_terminate(&inputEvents)
+
+        ecs.view_terminate(&menu_view) 
+    }
+    append(&results.setup,
+        setup_game_manager,
+        setup_results_menu)
+    append(&results.input,
+        input_axis_event)
+    append(&results.update,
+        update_results_menu)
+    append(&results.render,
+        render_results_menu) 
 
     active_scene = &scenes[0]
 
@@ -112,7 +138,7 @@ scenes_init :: proc() {
 
 scenes_deinit :: proc() {
     active_scene.deinit()
-    ecs.clear(&active_scene.db)
+    ecs.terminate(&active_scene.db)
 
     for &scene in scenes {
         delete(scene.setup)
@@ -124,7 +150,7 @@ scenes_deinit :: proc() {
 
 switch_scene :: proc(scene: uint) {
     active_scene.deinit()
-    ecs.clear(&active_scene.db)
+    ecs.terminate(&active_scene.db)
 
     active_scene = &scenes[scene]
 
