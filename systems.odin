@@ -16,7 +16,7 @@ setup_game_manager :: proc() {
     manager, _ := ecs.create_entity(&global_db)
 
     stats, _ := ecs.add_component(&playerStats, manager)
-    stats.health = 5
+    stats.health = 10
     stats.level = 1
 }
 
@@ -27,7 +27,7 @@ setup_main_menu :: proc() {
     menu.background = load_texture("images/title_bg.png")
 
     event, _ := ecs.add_component(&inputEvents, main)
-    event.next_input_delay = 0.33
+    event.next_input_delay = 0.67
 }
 
 setup_results_menu :: proc() {
@@ -37,7 +37,7 @@ setup_results_menu :: proc() {
     menu.background = load_texture("images/results_bg.png")
 
     event, _ := ecs.add_component(&inputEvents, main)
-    event.next_input_delay = 0.33
+    event.next_input_delay = 0.67
 
     stats := &ecs.slice(&playerStats)[0]
     stats.wealth_total += stats.wealth
@@ -61,6 +61,7 @@ setup_player :: proc() {
 setup_2dmap_generation :: proc() {
     tilemap_height :: 37 
     tilemap_width :: 50
+    tilemap_size :: tilemap_width * tilemap_height
 
     scene_map, _ := ecs.create_entity(&active_scene.db)
 
@@ -68,7 +69,7 @@ setup_2dmap_generation :: proc() {
     int_map, _ := ecs.add_component(&intMaps, scene_map)
     int_map.height = tilemap_height
     int_map.width = tilemap_width
-    int_map.data = make([dynamic]u8, tilemap_height * tilemap_width)
+    int_map.data = make([dynamic]u8, tilemap_size)
 
     seed := time.time_to_unix(time.now())
     // seed :: 3600
@@ -120,12 +121,18 @@ setup_2dmap_generation :: proc() {
         // fmt.print("\n")
     }
 
-    // Set exit location
-    exit_index := rand.uint_range(0, tilemap_width * tilemap_height)
-    for int_map.data[exit_index] != 0 {
-        exit_index += 1
+    // Set unique locations
+    // 0 = exit
+    // 1 = telescope
+    // 2 = health machine
+    for loc in 0..<3 {
+        loc_index := rand.uint_range(0, tilemap_size)
+        for int_map.data[loc_index] != 0 {
+            loc_index = (loc_index + 1) % tilemap_size
+        }
+
+        int_map.data[loc_index] = u8(10 + (loc * 2))
     }
-    int_map.data[exit_index] = 10
     // int_map.data[5] = 10
 
     tilemap, _ := ecs.add_component(&tilemaps, scene_map)
@@ -133,7 +140,7 @@ setup_2dmap_generation :: proc() {
     tilemap.texture = load_texture("images/tilemap.png")
     tilemap.height = tilemap_height
     tilemap.width = tilemap_width
-    tilemap.tiles = make([dynamic]u8, tilemap_height * tilemap_width)
+    tilemap.tiles = make([dynamic]u8, tilemap_size)
 
     // Calculate tile values
     dpos: [4][2]int = {
@@ -202,7 +209,7 @@ input_axis_event :: proc() {
         event.axes.xy = 0
 
         event.wait_time = rl.GetTime()
-        // if event.wait_time < event.next_input_time + 0.33 do return
+        if event.wait_time < event.next_input_time - (event.next_input_delay / 2) do return
 
         if rl.IsKeyDown(.LEFT) {
             event.axes_buffer = {-1.0, 0}
@@ -251,6 +258,7 @@ update_results_menu :: proc() {
     menu.cursor = (menu.cursor + cast(c.int)input.axes.y) & 1 
     if .accept in input.buttons {
         stats := &ecs.slice(&playerStats)[0]
+        if stats.health < 3 do stats.health = 3
         stats.wealth = 0
         stats.steps = 0
         stats.level += 1
@@ -275,6 +283,14 @@ update_camera :: proc() {
 update_player_movement :: proc() {
     event := ecs.slice(&player_view, InputEvent)[0] 
     stats := &ecs.slice(&playerStats)[0]
+
+    if stats.flags >= {.telescope, .payment } {
+        cam := &ecs.slice(&cameras)[0] 
+        cam.zoom = 1
+    } else {
+        cam := &ecs.slice(&cameras)[0]
+        cam.zoom = 2
+    }
  
     if stats.health == 0 {
         if .accept in event.buttons {
@@ -290,16 +306,14 @@ update_player_movement :: proc() {
 
     pos := ecs.slice(&player_view, Position)[0]
     temp_pos := pos^
-
-    grid := &ecs.slice(&intMaps)[0]
     
+    grid := &ecs.slice(&intMaps)[0]
     temp_pos += event.axes.xy
     if temp_pos.x < 0 || uint(temp_pos.x) >= grid.width || temp_pos.y < 0 || uint(temp_pos.y) > grid.height {
         return
     }
 
     stats.steps += 1
-
     if stats.steps % 10 == 0 {
         stats.health -= 1
     }
@@ -307,26 +321,52 @@ update_player_movement :: proc() {
     i := (uint(temp_pos.y) * grid.width) + uint(temp_pos.x)
     if bool(grid.data[i] & 1) {
         grid.data[i] -= 1
-        return
     } else {
-        switch grid.data[i] {
-            case 2: stats.wealth += 5
-            case 4: stats.wealth += 100
-            case 6: stats.wealth += 1000
-            case 8: stats.health += 1
-            case 10: 
-                switch_scene(2)
-                return
-            case: break
-        }
-        grid.data[i] = 0
+        pos^ = temp_pos 
     }
-
-    pos^ = temp_pos
 }
 
 update_check_player :: proc() {
+    grid := &ecs.slice(&intMaps)[0]
     stats := &ecs.slice(&playerStats)[0] 
+    pos := ecs.slice(&player_view, Position)[0]
+    
+    i := (uint(pos.y) * grid.width) + uint(pos.x)
+    switch grid.data[i] {
+    case 2: 
+        stats.wealth += 5
+        grid.data[i] = 0
+    case 4: 
+        stats.wealth += 100
+        grid.data[i] = 0
+    case 6: 
+        stats.wealth += 1000
+        grid.data[i] = 0
+    case 8: 
+        stats.health += 1
+        grid.data[i] = 0
+    case 10: 
+        switch_scene(2)
+        return
+    case 12: 
+        stats.flags += {.telescope}
+        if stats.wealth >= 1500 {
+            stats.flags += {.payment}
+            stats.wealth -= 1500
+        }
+    case 14: 
+        stats.flags += {.dispenser}
+        if stats.wealth >= 5000 {
+            stats.flags += {.payment}
+            stats.wealth -= 5000
+            stats.health += 5
+        }
+    case: 
+        break
+    }
+
+    if stats.flags != {} && grid.data[i] <= 10 do stats.flags = {}
+
     if stats.health == 0 {
         anim := ecs.slice(&player_view, Animation)[0] 
         anim.source.y = 16
@@ -452,7 +492,14 @@ render_tilemap :: proc() {
                     case 8,9:
                     rect.x = 48
                     case 10:
-                    rect.y += 16
+                    rect.y = 80
+                    rect.x = 0
+                    case 12:
+                    rect.y = 80
+                    rect.x = 16
+                    case 14:
+                    rect.y = 80
+                    rect.x = 32
                 }
 
                 rl.DrawTextureRec(tm.texture^, rect, {pos_x, pos_y}, rl.WHITE)
@@ -476,7 +523,7 @@ render_player_state :: proc() {
 
     if stats.health == 0 {
         rl.DrawText("YOU", ui_pos_x + 16, 0, 32, rl.BLACK) 
-        rl.DrawText("DIED", ui_pos_x + 16, 32, 32, rl.BLACK) 
+        rl.DrawText("DIED!", ui_pos_x + 16, 32, 32, rl.BLACK) 
 
         rl.DrawText("Press", ui_pos_x + 16, 96, 24, rl.BLACK)
         rl.DrawText("[SPACE] to", ui_pos_x + 16, 120, 24, rl.BLACK)
@@ -496,4 +543,28 @@ render_player_state :: proc() {
 
     rl.DrawText("LEVEL", ui_pos_x + 16, 240, 32, rl.BLACK)
     rl.DrawText(fmt.caprintf(" %d", stats.level), ui_pos_x + 16, 272, 32, rl.BLACK)
+
+    if .dispenser in stats.flags {
+        if .payment in stats.flags {
+            rl.DrawText("Thanks", ui_pos_x + 16, 400, 24, rl.BLACK) 
+            rl.DrawText("for your", ui_pos_x + 16, 424, 24, rl.BLACK) 
+            rl.DrawText("payment", ui_pos_x + 16, 448, 24, rl.BLACK)
+        } else {
+            rl.DrawText("Sorry", ui_pos_x + 16, 400, 24, rl.BLACK) 
+            rl.DrawText("you need", ui_pos_x + 16, 424, 24, rl.BLACK) 
+            rl.DrawText("$5000", ui_pos_x + 16, 448, 24, rl.BLACK) 
+        }
+    }
+
+    if .telescope in stats.flags {
+        if .payment in stats.flags {
+            rl.DrawText("Thanks", ui_pos_x + 16, 400, 24, rl.BLACK) 
+            rl.DrawText("for your", ui_pos_x + 16, 424, 24, rl.BLACK) 
+            rl.DrawText("payment", ui_pos_x + 16, 448, 24, rl.BLACK) 
+        } else {
+            rl.DrawText("Sorry", ui_pos_x + 16, 400, 24, rl.BLACK) 
+            rl.DrawText("you need", ui_pos_x + 16, 424, 24, rl.BLACK) 
+            rl.DrawText("$1500", ui_pos_x + 16, 448, 24, rl.BLACK) 
+        }
+    }
 }

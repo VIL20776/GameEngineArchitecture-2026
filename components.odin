@@ -15,11 +15,14 @@ InputEvent :: struct {
     buttons, buttons_buffer: ButtonsSet
 }
 
+PlayerFlagsSet :: bit_set[enum{telescope, dispenser, payment, damaged}]
+
 PlayerStatus :: struct {
     health, 
     wealth, wealth_total, 
     steps, 
-    level: c.int
+    level: c.int,
+    flags: PlayerFlagsSet
 }
 
 Menu :: struct {
