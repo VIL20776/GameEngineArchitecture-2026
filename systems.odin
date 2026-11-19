@@ -16,7 +16,7 @@ setup_game_manager :: proc() {
     manager, _ := ecs.create_entity(&global_db)
 
     stats, _ := ecs.add_component(&playerStats, manager)
-    stats.health = 10
+    stats.health = 5
     stats.level = 1
 }
 
@@ -27,7 +27,7 @@ setup_main_menu :: proc() {
     menu.background = load_texture("images/title_bg.png")
 
     event, _ := ecs.add_component(&inputEvents, main)
-    event.next_input_delay = 0.67
+    event.next_input_delay = 0.33
 }
 
 setup_results_menu :: proc() {
@@ -37,10 +37,20 @@ setup_results_menu :: proc() {
     menu.background = load_texture("images/results_bg.png")
 
     event, _ := ecs.add_component(&inputEvents, main)
-    event.next_input_delay = 0.67
+    event.next_input_delay = 0.33
 
     stats := &ecs.slice(&playerStats)[0]
     stats.wealth_total += stats.wealth
+}
+
+setup_scores_menu :: proc() {
+    main, _ := ecs.create_entity(&active_scene.db)
+    
+    menu, _ := ecs.add_component(&menus, main)
+    menu.background = load_texture("images/results_bg.png")
+
+    event, _ := ecs.add_component(&inputEvents, main)
+    event.next_input_delay = 0.33
 }
 
 setup_player :: proc() {
@@ -71,8 +81,8 @@ setup_2dmap_generation :: proc() {
     int_map.width = tilemap_width
     int_map.data = make([dynamic]u8, tilemap_size)
 
-    seed := time.time_to_unix(time.now())
-    // seed :: 3600
+    // seed := time.time_to_unix(time.now())
+    seed :: 3600
     for y in 0..<tilemap_height {
         for x in 0..<tilemap_width {
             i := (y * tilemap_width) + x
@@ -126,14 +136,14 @@ setup_2dmap_generation :: proc() {
     // 1 = telescope
     // 2 = health machine
     for loc in 0..<3 {
-        loc_index := rand.uint_range(0, tilemap_size)
+        loc_index := rand.uint_range(0, 20)
+        // loc_index := rand.uint_range(0, tilemap_size)
         for int_map.data[loc_index] != 0 {
             loc_index = (loc_index + 1) % tilemap_size
         }
 
         int_map.data[loc_index] = u8(10 + (loc * 2))
     }
-    // int_map.data[5] = 10
 
     tilemap, _ := ecs.add_component(&tilemaps, scene_map)
 
@@ -244,30 +254,74 @@ update_main_menu :: proc() {
     menu := ecs.slice(&menu_view, Menu)[0]
     input := ecs.slice(&menu_view, InputEvent)[0]
     
-    menu.cursor = (menu.cursor + cast(c.int)input.axes.y) & 1 
+    menu.cursor = (menu.cursor + cast(c.int)input.axes.y) % 3 
     if .accept in input.buttons {
-        if menu.cursor == 0 do switch_scene(1); else
-        if menu.cursor == 1 do game_over = true
+        switch menu.cursor {
+        case 0:
+            stats := &ecs.slice(&playerStats)[0]
+            score, _ := ecs.create_entity(&global_db)
+            ecs.add_component(&scores, score)
+            stats.score_eid = score
+            stats.flags += {.payment}
+            stats.bonus = .cupon
+
+            switch_scene(1)
+        case 1:
+            switch_scene(3)
+        case 2:
+            game_over = true
+        }
     }
 }
 
 update_results_menu :: proc() {
     menu := ecs.slice(&menu_view, Menu)[0]
     input := ecs.slice(&menu_view, InputEvent)[0]
-    
-    menu.cursor = (menu.cursor + cast(c.int)input.axes.y) & 1 
+
+    menu.cursor = (menu.cursor + cast(c.int)input.axes.y) & 3 
     if .accept in input.buttons {
         stats := &ecs.slice(&playerStats)[0]
-        if stats.health < 3 do stats.health = 3
+        // Next level bonuses 
+        switch menu.cursor {
+        case 0: 
+            if stats.wealth_total < 5000 do return
+
+            stats.wealth_total -= 5000
+            stats.health += 5
+            stats.bonus = .health
+        case 1:
+            if stats.wealth_total < 7500 do return
+
+            stats.wealth_total -= 7500
+            stats.bonus = .multiplier
+        case 2:
+            if stats.wealth_total < 10000 do return
+
+            stats.wealth_total -= 10000
+            stats.flags += { .payment }
+            stats.bonus = .cupon
+        case:
+            stats.bonus = .none
+        }
+
+        score := ecs.get_component(&scores, stats.score_eid)
+        append(&score.bonuses, stats.bonus)
+
         stats.wealth = 0
         stats.steps = 0
         stats.level += 1
-        // if menu.cursor == 0 do 
-        // if menu.cursor == 1 do game_over = true
+
+        // if stats.health < 3 do stats.health = 3
         switch_scene(1)
     }
 
 }
+update_scores_menu :: proc() {
+    input := ecs.slice(&menu_view, InputEvent)[0]
+
+    if .accept in input.buttons do switch_scene(0)
+}
+
 
 update_camera :: proc() {
     camera := &ecs.slice(&cameras)[0]
@@ -294,6 +348,10 @@ update_player_movement :: proc() {
  
     if stats.health == 0 {
         if .accept in event.buttons {
+            score := ecs.get_component(&scores, stats.score_eid)
+            score.max_level = stats.level
+            score.max_wealth = stats.wealth_total
+
             stats^ = {}
             stats.level = 1
             stats.health = 5
@@ -324,6 +382,8 @@ update_player_movement :: proc() {
     } else {
         pos^ = temp_pos 
     }
+
+    update_check_player()
 }
 
 update_check_player :: proc() {
@@ -334,13 +394,13 @@ update_check_player :: proc() {
     i := (uint(pos.y) * grid.width) + uint(pos.x)
     switch grid.data[i] {
     case 2: 
-        stats.wealth += 5
+        stats.wealth += 5 if stats.bonus != .multiplier else 10
         grid.data[i] = 0
     case 4: 
-        stats.wealth += 100
+        stats.wealth += 100 if stats.bonus != .multiplier else 200
         grid.data[i] = 0
     case 6: 
-        stats.wealth += 1000
+        stats.wealth += 1000 if stats.bonus != .multiplier else 2000
         grid.data[i] = 0
     case 8: 
         stats.health += 1
@@ -350,12 +410,15 @@ update_check_player :: proc() {
         return
     case 12: 
         stats.flags += {.telescope}
-        if stats.wealth >= 1500 {
+        if .payment not_in stats.flags && stats.wealth >= 1500 {
             stats.flags += {.payment}
-            stats.wealth -= 1500
+            stats.wealth -= 1500 
         }
     case 14: 
         stats.flags += {.dispenser}
+        if .payment in stats.flags {
+            stats.health += 5
+        } else
         if stats.wealth >= 5000 {
             stats.flags += {.payment}
             stats.wealth -= 5000
@@ -365,7 +428,10 @@ update_check_player :: proc() {
         break
     }
 
-    if stats.flags != {} && grid.data[i] <= 10 do stats.flags = {}
+    if (.dispenser in stats.flags || .telescope in stats.flags) && 
+        grid.data[i] <= 10 { 
+            stats.flags -= {.dispenser, .telescope, .payment}
+    }
 
     if stats.health == 0 {
         anim := ecs.slice(&player_view, Animation)[0] 
@@ -388,10 +454,11 @@ render_main_menu :: proc() {
     rl.DrawText("DUNGEON", 240, 80, 32, rl.BLACK) 
     rl.DrawText("EXPLORER", 240, 112, 32, rl.BLACK) 
 
-    rl.DrawText("START", 272, 272, 32, rl.BLACK) 
+    rl.DrawText("START", 272, 240, 32, rl.BLACK) 
+    rl.DrawText("SCORE", 272, 272, 32, rl.BLACK) 
     rl.DrawText("EXIT", 272, 304, 32, rl.BLACK) 
 
-    rl.DrawText(">", 256, 272 + (menu.cursor * 32), 32, rl.BLACK) 
+    rl.DrawText(">", 256, 240 + (menu.cursor * 32), 32, rl.BLACK) 
 
     rl.DrawText("Press [SPACE] to select", 174, 408, 24, rl.BLACK) 
 }
@@ -405,9 +472,68 @@ render_results_menu :: proc() {
     rl.DrawText(fmt.caprintf("WEALTH COLLECTED: $%d", stats.wealth), 64, 48, 32, rl.BLACK)
     rl.DrawText(fmt.caprintf("WEALTH TOTAL: $%d", stats.wealth_total), 64, 80, 32, rl.BLACK)
 
-    rl.DrawText(fmt.caprintf("PREPARE FOR LEVEL %d", stats.level + 1), 64, 208, 32, rl.BLACK)
+    rl.DrawText("DUNGEON MASTER MAKES YOU AN OFFER: ", 64, 208, 24, rl.BLACK)
 
-    rl.DrawText("Press [SPACE] to continue", 150, 376, 24, rl.BLACK) 
+    rl.DrawText(">", 64, 240 + (menu.cursor * 24), 24, rl.BLACK) 
+
+    rl.DrawText("1. 5 health for $5000", 80, 240, 24, rl.BLACK)
+    rl.DrawText("2. 2x wealth multiplier for $7500", 80, 264, 24, rl.BLACK)
+    rl.DrawText("3. Premium cupon for $10000", 80, 288, 24, rl.BLACK)
+    rl.DrawText("4. Nothing", 80, 312, 24, rl.BLACK)
+
+    rl.DrawText("Press [SPACE] to select", 150, 408, 24, rl.BLACK) 
+}
+
+render_scores_menu :: proc() {
+    menu := ecs.slice(&menu_view, &menus)[0]
+    stats := &ecs.slice(&playerStats)[0]
+
+    card_texture := load_texture("images/tilemap.png")
+
+    rl.DrawTexture(menu.background^, 0, 0, rl.WHITE)
+
+    max_wealth, max_level: c.int
+    
+    scores_slice := ecs.slice(&scores)
+
+    y: c.int = 208
+    for i := len(scores_slice) - 1; i >= 0; i -= 1 {
+        score := scores_slice[i]
+        if score.max_wealth > max_wealth do max_wealth = score.max_wealth
+        if score.max_level > max_level do max_level = score.max_level
+
+        rl.DrawText(fmt.caprintf("Wealth total: $%d", score.max_wealth), 64, y, 24, rl.BLACK)
+
+        for &bonus, j in score.bonuses {
+            if j > 15 do break
+
+            bonus_src: rl.Rectangle = {
+                x = 16 * c.float(transmute(uint)bonus),
+                y = 96, 
+                height = 16, 
+                width = 16
+            }
+
+            bonus_dest: rl.Rectangle = {
+                x = 64 + f32(32 * j), 
+                y = f32(y + 24),
+                height = 32, 
+                width = 32
+            }
+
+            rl.DrawTexturePro(card_texture^, bonus_src, bonus_dest, {0,0}, 0, rl.WHITE)
+        }
+
+        y += 64
+        if (y + 64) > 376 do break
+    }
+    
+    rl.DrawText(fmt.caprintf("BEST WEALTH TOTAL: $%d", max_wealth), 64, 48, 32, rl.BLACK)
+    rl.DrawText(fmt.caprintf("HIGHEST LEVEL REACHED: %d", max_level), 64, 80, 32, rl.BLACK)
+
+    rl.DrawText("Latest scores:", 64, 176, 24, rl.BLACK)
+
+    rl.DrawText("Press [SPACE] to select", 150, 408, 24, rl.BLACK) 
 }
 
 render_begin_camera :: proc() {
@@ -520,6 +646,7 @@ render_player_state :: proc() {
         )
 
     stats := &ecs.slice(&playerStats)[0]
+    tm := ecs.slice(&map_view, Tilemap)[0]
 
     if stats.health == 0 {
         rl.DrawText("YOU", ui_pos_x + 16, 0, 32, rl.BLACK) 
@@ -543,6 +670,23 @@ render_player_state :: proc() {
 
     rl.DrawText("LEVEL", ui_pos_x + 16, 240, 32, rl.BLACK)
     rl.DrawText(fmt.caprintf(" %d", stats.level), ui_pos_x + 16, 272, 32, rl.BLACK)
+
+    bonus_src: rl.Rectangle = {
+        x = 16 * c.float(transmute(uint)stats.bonus),
+        y = 96, 
+        height = 16, 
+        width = 16
+    }
+
+    bonus_dest: rl.Rectangle = {
+        x = ui_pos_x + 16, 
+        y = 352,
+        height = 32, 
+        width = 32
+    }
+
+    rl.DrawText("BONUS", ui_pos_x + 16, 320, 32, rl.BLACK)
+    rl.DrawTexturePro(tm.texture^, bonus_src, bonus_dest, {0,0}, 0, rl.WHITE)
 
     if .dispenser in stats.flags {
         if .payment in stats.flags {

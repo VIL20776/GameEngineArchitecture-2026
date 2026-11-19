@@ -15,14 +15,22 @@ InputEvent :: struct {
     buttons, buttons_buffer: ButtonsSet
 }
 
-PlayerFlagsSet :: bit_set[enum{telescope, dispenser, payment, damaged}]
+PlayerFlagsSet :: bit_set[enum{telescope, dispenser, payment, multiplier}]
+PlayerBonus :: enum uint {none, health, multiplier, cupon}
 
 PlayerStatus :: struct {
     health, 
     wealth, wealth_total, 
     steps, 
     level: c.int,
-    flags: PlayerFlagsSet
+    flags: PlayerFlagsSet,
+    bonus: PlayerBonus,
+    score_eid: ecs.entity_id
+}
+
+Score :: struct {
+    max_wealth, max_level: c.int,
+    bonuses: [dynamic]PlayerBonus,
 }
 
 Menu :: struct {
@@ -59,4 +67,4 @@ intMaps: ecs.Table(IntMap)
 tilemaps: ecs.Table(Tilemap)
 
 playerStats: ecs.Table(PlayerStatus)
-
+scores: ecs.Table(Score)

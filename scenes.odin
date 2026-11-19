@@ -18,7 +18,7 @@ scenes: []Scene
 active_scene: ^Scene
 
 scenes_init :: proc() {
-    scenes = make([]Scene, 3)
+    scenes = make([]Scene, 4)
 
     //Main menu
     main_menu := &scenes[0]
@@ -40,6 +40,7 @@ scenes_init :: proc() {
     }
 
     append(&main_menu.setup,
+        setup_game_manager,
         setup_main_menu)
     append(&main_menu.input,
         input_axis_event)
@@ -95,7 +96,7 @@ scenes_init :: proc() {
         input_axis_event)
     append(&level.update,
         update_player_movement,
-        update_check_player,
+        // update_check_player,
         update_camera)
     append(&level.render,
         render_begin_camera,
@@ -130,6 +131,32 @@ scenes_init :: proc() {
     append(&results.render,
         render_results_menu) 
 
+    // Scores
+    scores := &scenes[3]
+    scores.init = proc() {
+        ecs.table_init(&menus, &active_scene.db, ENTITY_CAP)
+        ecs.table_init(&inputEvents, &active_scene.db, 1)
+
+        ecs.view_init(&menu_view, &active_scene.db, 
+            includes = {&menus, &inputEvents}
+        ) 
+    }
+    scores.deinit = proc() {
+        ecs.table_terminate(&menus)
+        ecs.table_terminate(&inputEvents)
+
+        ecs.view_terminate(&menu_view) 
+    }
+    append(&scores.setup,
+        setup_scores_menu)
+    append(&scores.input,
+        input_axis_event)
+    append(&scores.update,
+        update_scores_menu)
+    append(&scores.render,
+        render_scores_menu)
+
+    // Setup entry scene
     active_scene = &scenes[0]
 
     ecs.init(&active_scene.db, ENTITY_CAP)

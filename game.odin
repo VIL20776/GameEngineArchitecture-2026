@@ -12,6 +12,7 @@ game_init :: proc() {
     ecs.init(&global_db, ENTITY_CAP)
         
     ecs.table_init(&playerStats, &global_db, 1)
+    ecs.table_init(&scores, &global_db, ENTITY_CAP)
 
     scenes_init()
 }
@@ -19,6 +20,8 @@ game_init :: proc() {
 game_deinit :: proc() {
     unload_textures()
     scenes_deinit()
+
+    ecs.terminate(&global_db)
 }
 
 game_setup :: proc() {
