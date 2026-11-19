@@ -81,8 +81,8 @@ setup_2dmap_generation :: proc() {
     int_map.width = tilemap_width
     int_map.data = make([dynamic]u8, tilemap_size)
 
-    // seed := time.time_to_unix(time.now())
-    seed :: 3600
+    seed := time.time_to_unix(time.now())
+    // seed :: 3600
     for y in 0..<tilemap_height {
         for x in 0..<tilemap_width {
             i := (y * tilemap_width) + x
@@ -136,8 +136,8 @@ setup_2dmap_generation :: proc() {
     // 1 = telescope
     // 2 = health machine
     for loc in 0..<3 {
-        loc_index := rand.uint_range(0, 20)
-        // loc_index := rand.uint_range(0, tilemap_size)
+        // loc_index := rand.uint_range(0, 20)
+        loc_index := rand.uint_range(0, tilemap_size)
         for int_map.data[loc_index] != 0 {
             loc_index = (loc_index + 1) % tilemap_size
         }
@@ -262,8 +262,6 @@ update_main_menu :: proc() {
             score, _ := ecs.create_entity(&global_db)
             ecs.add_component(&scores, score)
             stats.score_eid = score
-            stats.flags += {.payment}
-            stats.bonus = .cupon
 
             switch_scene(1)
         case 1:
